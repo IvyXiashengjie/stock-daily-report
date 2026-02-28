@@ -191,6 +191,14 @@ body {
   padding-top: 12px; border-top: 1px solid #e0dcd5;
   line-height: 1.8;
 }
+.online-link {
+  display: inline-block; margin-top: 14px;
+  padding: 10px 28px; background: #c0392b; color: #fff;
+  font-size: 13px; font-weight: 600; letter-spacing: 1px;
+  text-decoration: none; border-radius: 3px;
+  transition: background 0.2s;
+}
+.online-link:hover { background: #a93226; }
 
 /* ===== 响应式 ===== */
 @media (max-width: 600px) {
@@ -214,7 +222,7 @@ body {
 <div class="top-bar">
   <div class="top-bar-inner">
     <div class="brand">MARKET<span>BRIEF</span></div>
-    <div class="top-meta">Saturday, February 28, 2026<br>01:55 CST</div>
+    <div class="top-meta">Saturday, February 28, 2026<br>02:03 CST</div>
   </div>
 </div>
 
@@ -252,41 +260,39 @@ body {
 </div>
 <div class="rpt-section">
 <h3 class="rpt-heading">市场总览</h3>
-<p class="rpt-para">今日A股整体震荡上行，受益于宏观经济数据的利好支撑，主要指数小幅收涨。美股延续近期波动格局，受地缘政治与科技板块消息影响，表现分化。港股在外部不确定性加剧下维持窄幅震荡，部分资金流入防御性资产。</p>
+<p class="rpt-para">今日A股整体震荡上行，受益于宏观经济数据利好及政策面支撑，沪深两市小幅收涨。美股延续近期波动格局，科技股表现相对抗跌，但金融板块承压。港股受外围市场情绪影响，维持窄幅震荡，恒生科技指数小幅回调。</p>
 </div>
 <div class="rpt-section">
 <h3 class="rpt-heading">重要新闻TOP5</h3>
-<div class="rpt-news-item"><span class="rpt-num">1</span><div class="rpt-news-text"><strong>国家统计局发布2025年经济数据</strong></div></div>
-<div class="rpt-bullet"><div class="rpt-bullet-text">全年GDP增长5.0%，沪深交易所A股筹资额达1.26万亿元，显示资本市场持续活跃。</div></div>
-<div class="rpt-bullet"><div class="rpt-bullet-text"><strong>影响</strong>：提振市场信心，对金融、基建等相关行业形成利好。</div></div>
-<div class="rpt-news-item"><span class="rpt-num">2</span><div class="rpt-news-text"><strong>美国ITC启动MRAM设备337调查</strong></div></div>
-<div class="rpt-bullet"><div class="rpt-bullet-text">对中国相关企业出口构成潜在风险，可能影响半导体产业链。</div></div>
-<div class="rpt-bullet"><div class="rpt-bullet-text"><strong>影响</strong>：短期或引发相关板块波动，需关注后续应对措施。</div></div>
-<div class="rpt-news-item"><span class="rpt-num">3</span><div class="rpt-news-text"><strong>Anthropic拒绝参与自主武器开发</strong></div></div>
-<div class="rpt-bullet"><div class="rpt-bullet-text">引发AI伦理讨论，影响全球AI产业政策走向。</div></div>
-<div class="rpt-bullet"><div class="rpt-bullet-text"><strong>影响</strong>：短期内对AI板块情绪偏谨慎，长期或推动监管趋严。</div></div>
-<div class="rpt-news-item"><span class="rpt-num">4</span><div class="rpt-news-text"><strong>日本民众集会反对美军基地建设及修宪扩军</strong></div></div>
-<div class="rpt-bullet"><div class="rpt-bullet-text">地缘政治风险上升，可能影响东亚地区稳定。</div></div>
-<div class="rpt-bullet"><div class="rpt-bullet-text"><strong>影响</strong>：对区域股市尤其是军工、能源等板块构成压力。</div></div>
-<div class="rpt-news-item"><span class="rpt-num">5</span><div class="rpt-news-text"><strong>双良节能因蹭热点被立案调查</strong></div></div>
-<div class="rpt-bullet"><div class="rpt-bullet-text">市场对“蹭热点”行为监管趋严，影响投资者情绪。</div></div>
-<div class="rpt-bullet"><div class="rpt-bullet-text"><strong>影响</strong>：短期对相关概念板块形成压制。</div></div>
+<div class="rpt-news-item"><span class="rpt-num">1</span><div class="rpt-news-text"><strong>2025年GDP增长5.0%，经济稳中有进</strong></div></div>
+<p class="rpt-para">国家统计局数据显示，2025年全年GDP增长5.0%，显示经济基本面稳健，对市场信心形成支撑。</p>
+<div class="rpt-news-item"><span class="rpt-num">2</span><div class="rpt-news-text"><strong>A股筹资额大幅增长，融资环境改善</strong></div></div>
+<p class="rpt-para">2025年沪深交易所A股累计筹资12583亿元，同比增加8332亿元，反映资本市场融资功能持续增强。</p>
+<div class="rpt-news-item"><span class="rpt-num">3</span><div class="rpt-news-text"><strong>美国启动MRAM设备337调查，中资企业面临挑战</strong></div></div>
+<p class="rpt-para">美国ITC对磁阻随机存取存储器（MRAM）设备启动337调查，可能影响相关中国半导体企业出口。</p>
+<div class="rpt-news-item"><span class="rpt-num">4</span><div class="rpt-news-text"><strong>AI公司Anthropic拒绝参与自主武器开发，引发行业关注</strong></div></div>
+<p class="rpt-para">Anthropic明确表态不参与自主武器开发，凸显AI伦理议题升温，对相关板块产生一定影响。</p>
+<div class="rpt-news-item"><span class="rpt-num">5</span><div class="rpt-news-text"><strong>建筑业增加值同比下降1.1%，地产链压力显现</strong></div></div>
+<p class="rpt-para">建筑业增速放缓，反映房地产行业仍处于调整期，对相关产业链构成短期压力。</p>
 </div>
 <div class="rpt-section">
 <h3 class="rpt-heading">个股聚焦</h3>
-<div class="rpt-bullet"><div class="rpt-bullet-text"><strong>双良节能（600481.SH）</strong>：因涉嫌“蹭热点”被证监会立案调查，股价短期承压。</div></div>
-<div class="rpt-bullet"><div class="rpt-bullet-text"><strong>乐华娱乐</strong>：王一博相关传闻引发舆论风波，公司声明称内容失实，需关注后续舆情发展。</div></div>
-<div class="rpt-bullet"><div class="rpt-bullet-text"><strong>恒生科技指数成分股</strong>：受港股调整影响，部分科技股出现回调，但优质资产仍具配置价值。</div></div>
+<div class="rpt-bullet"><div class="rpt-bullet-text"><strong>双良节能（600481.SH）</strong>：因蹭“商业航天”热点被证监会立案调查，股价短期承压，需关注后续监管动态。</div></div>
+<div class="rpt-bullet"><div class="rpt-bullet-text"><strong>乐华娱乐</strong>：辟谣王一博相关传闻，短期内或对品牌形象有所修复，但需观察市场反应。</div></div>
+<div class="rpt-bullet"><div class="rpt-bullet-text"><strong>新能源与半导体相关标的</strong>：受益于技术突破（如钙钛矿光伏组件）及政策支持，具备长期投资价值。</div></div>
 </div>
 <div class="rpt-section">
 <h3 class="rpt-heading">市场情绪</h3>
 <p class="rpt-para"><strong>中性偏乐观</strong></p>
-<div class="rpt-bullet"><div class="rpt-bullet-text">宏观经济数据总体向好，A股融资规模扩大，显示市场流动性充裕。</div></div>
-<div class="rpt-bullet"><div class="rpt-bullet-text">然而，地缘政治风险与AI伦理问题带来一定不确定性，市场观望情绪较浓。</div></div>
+<p class="rpt-para">宏观经济数据总体向好，政策面持续释放积极信号，市场风险偏好有所回升。但部分行业如建筑业、地产链仍面临调整压力，叠加外部地缘政治风险，整体情绪趋于谨慎。</p>
 </div>
 <div class="rpt-section">
 <h3 class="rpt-heading">明日展望</h3>
-<p class="rpt-para">明日市场或延续震荡格局，A股有望在政策面支撑下小幅反弹；美股受科技股和地缘风险影响，波动或将加大；港股则需关注外围环境变化及资金流向。建议投资者关注政策利好方向及业绩稳定的蓝筹股，规避短期风险事件影响。</p>
+<p class="rpt-para">明日市场或延续震荡格局，关注以下几点：</p>
+<div class="rpt-bullet"><div class="rpt-bullet-text">A股资金面是否持续流入，尤其是新能源、科技等主线板块；</div></div>
+<div class="rpt-bullet"><div class="rpt-bullet-text">美股科技股能否企稳，带动全球市场情绪回暖；</div></div>
+<div class="rpt-bullet"><div class="rpt-bullet-text">港股受内地政策及外围消息影响，或继续呈现结构性波动。</div></div>
+<p class="rpt-para">总体来看，短期市场或以结构性机会为主，建议关注政策受益方向及业绩确定性强的板块。</p>
 <p class="rpt-para">```</p>
 </div></div>
 
@@ -294,6 +300,7 @@ body {
 
 <div class="site-footer">
   <div class="footer-brand">MARKET BRIEF</div>
+  <a class="online-link" href="https://ivyxiashengjie.github.io/stock-daily-report/report_20260228.html">查看在线版本</a>
   <div class="footer-info">
     Data: CLS / East Money / Sina Finance<br>
     AI Analysis by Tongyi Qwen
