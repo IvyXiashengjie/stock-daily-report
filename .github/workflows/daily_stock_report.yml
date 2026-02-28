@@ -1,0 +1,35 @@
+name: 每日股市日报
+
+on:
+  schedule:
+    # UTC 时间，北京时间 = UTC + 8
+    # 工作日早上 8:30 (UTC 0:30)
+    - cron: '30 0 * * 1-5'
+    # 工作日下午 15:30 (UTC 7:30)
+    - cron: '30 7 * * 1-5'
+  workflow_dispatch:  # 支持手动触发
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Generate Stock Report
+        env:
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+        run: python stock_report.py
+
+      - name: Upload Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: stock-report-${{ github.run_number }}
+          path: report_*.md
+          retention-days: 30
