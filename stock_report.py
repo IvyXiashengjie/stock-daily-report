@@ -7,6 +7,7 @@
 import json
 import os
 import re
+import urllib.parse
 import urllib.request
 import urllib.error
 from datetime import datetime
@@ -208,7 +209,86 @@ def call_tongyi(news_text):
         return f"API 调用失败: {str(e)}"
 
 
-# ============ 推送部分 ============
+# ============ Server酱微信推送 ============
+
+def send_wechat(report):
+    """通过 Server酱 推送到微信"""
+    send_key = os.environ.get("SERVERCHAN_KEY", "")
+    if not send_key:
+        print("未设置 SERVERCHAN_KEY，跳过微信推送")
+        return
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    title = f"📈 每日股市简报 - {today}"
+
+    url = f"https://sctapi.ftqq.com/{send_key}.send"
+    payload = urllib.parse.urlencode({
+        "title": title,
+        "desp": report,
+    }).encode("utf-8")
+
+    req = urllib.request.Request(url, data=payload, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode())
+        if data.get("code") == 0:
+            print("微信推送成功")
+        else:
+            print(f"微信推送失败: {data.get('message', '')}")
+    except Exception as e:
+        print(f"微信推送失败: {e}")
+
+
+# ============ 邮件推送 ============
+
+def send_email(report):
+    """通过 Gmail SMTP 发送邮件"""
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+
+    smtp_user = os.environ.get("SMTP_USER", "")
+    smtp_pass = os.environ.get("SMTP_PASS", "")
+    email_to = os.environ.get("EMAIL_TO", smtp_user)
+
+    if not smtp_user or not smtp_pass:
+        print("未设置 SMTP_USER / SMTP_PASS，跳过邮件发送")
+        return
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"📈 每日股市简报 - {today}"
+    msg["From"] = f"股市日报Agent <{smtp_user}>"
+    msg["To"] = email_to
+
+    # 纯文本版本
+    msg.attach(MIMEText(report, "plain", "utf-8"))
+
+    # HTML 版本（将 Markdown 简单转为 HTML）
+    html_body = report
+    html_body = re.sub(r"^# (.+)$", r"<h1>\1</h1>", html_body, flags=re.MULTILINE)
+    html_body = re.sub(r"^## (.+)$", r"<h2>\1</h2>", html_body, flags=re.MULTILINE)
+    html_body = re.sub(r"^### (.+)$", r"<h3>\1</h3>", html_body, flags=re.MULTILINE)
+    html_body = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", html_body)
+    html_body = re.sub(r"^- (.+)$", r"<li>\1</li>", html_body, flags=re.MULTILINE)
+    html_body = re.sub(r"^---$", r"<hr>", html_body, flags=re.MULTILINE)
+    html_body = html_body.replace("\n\n", "</p><p>").replace("\n", "<br>")
+    html_content = f"""<html><body style="font-family: -apple-system, Arial, sans-serif; max-width: 700px; margin: 0 auto; padding: 20px; color: #333;">
+<p>{html_body}</p>
+<hr><p style="color: #999; font-size: 12px;">此邮件由股市日报Agent自动生成</p>
+</body></html>"""
+    msg.attach(MIMEText(html_content, "html", "utf-8"))
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as server:
+            server.login(smtp_user, smtp_pass)
+            server.sendmail(smtp_user, email_to.split(","), msg.as_string())
+        print(f"邮件发送成功 → {email_to}")
+    except Exception as e:
+        print(f"邮件发送失败: {e}")
+
+
+# ============ Webhook 推送 ============
 
 def send_webhook(text):
     """推送到企业微信/钉钉/飞书 Webhook"""
@@ -274,7 +354,13 @@ def main():
         with open(github_output, "a") as f:
             f.write(f"report_file={report_file}\n")
 
-    # 7. 推送 Webhook
+    # 7. 推送微信
+    send_wechat(report)
+
+    # 8. 发送邮件
+    send_email(report)
+
+    # 9. 推送 Webhook
     send_webhook(report)
 
     print(f"\n[{datetime.now()}] 完成")

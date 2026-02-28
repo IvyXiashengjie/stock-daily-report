@@ -24,6 +24,7 @@ jobs:
       - name: Generate Stock Report
         env:
           DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
         run: python stock_report.py
 
