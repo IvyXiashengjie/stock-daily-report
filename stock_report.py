@@ -224,10 +224,78 @@ def call_tongyi(news_text):
 
 # ============ HTML 详情页生成 ============
 
+def markdown_to_html(md):
+    """将 Markdown 转为结构化 HTML"""
+    sections = []
+    current_section = {"title": "", "content": []}
+
+    for line in md.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        # 标题行 → 新 section
+        h_match = re.match(r"^#{1,3}\s+(.+)$", line)
+        if h_match:
+            if current_section["title"] or current_section["content"]:
+                sections.append(current_section)
+            current_section = {"title": h_match.group(1), "content": []}
+            continue
+        # 加粗
+        line = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", line)
+        # 有序列表
+        ol_match = re.match(r"^(\d+)\.\s+(.+)$", line)
+        if ol_match:
+            current_section["content"].append(("ol", ol_match.group(1), ol_match.group(2)))
+            continue
+        # 无序列表
+        ul_match = re.match(r"^[-*]\s+(.+)$", line)
+        if ul_match:
+            current_section["content"].append(("ul", ul_match.group(1)))
+            continue
+        # 分隔线
+        if line == "---":
+            continue
+        # 普通段落
+        current_section["content"].append(("p", line))
+
+    if current_section["title"] or current_section["content"]:
+        sections.append(current_section)
+
+    # 渲染
+    section_icons = {"市场总览": "🌍", "重要新闻": "📰", "新闻": "📰", "TOP": "📰",
+                     "个股": "🔍", "情绪": "🎯", "展望": "🔮", "明日": "🔮"}
+    html_parts = []
+    for sec in sections:
+        icon = "📊"
+        for kw, ic in section_icons.items():
+            if kw in sec["title"]:
+                icon = ic
+                break
+        html_parts.append(f'<div class="report-section">')
+        if sec["title"]:
+            html_parts.append(f'<div class="report-section-title"><span class="section-icon">{icon}</span>{sec["title"]}</div>')
+        for item in sec["content"]:
+            if item[0] == "ol":
+                num, text = item[1], item[2]
+                num_int = int(num)
+                badge_color = ["#e74c3c", "#e67e22", "#f39c12", "#3498db", "#9b59b6"][min(num_int - 1, 4)]
+                html_parts.append(f'<div class="report-item"><span class="item-badge" style="background:{badge_color}">{num}</span><div class="item-text">{text}</div></div>')
+            elif item[0] == "ul":
+                html_parts.append(f'<div class="report-bullet"><span class="bullet-dot"></span><div class="bullet-text">{item[1]}</div></div>')
+            else:
+                html_parts.append(f'<p class="report-para">{item[1]}</p>')
+        html_parts.append("</div>")
+
+    return "\n".join(html_parts)
+
+
 def generate_html_report(report, quotes, news_list):
     """生成精美的 HTML 详情页"""
     today = datetime.now().strftime("%Y-%m-%d")
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    today_cn = datetime.now().strftime("%Y年%m月%d日")
+    now_str = datetime.now().strftime("%H:%M")
+    weekday_names = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
+    weekday = weekday_names[datetime.now().weekday()]
 
     # 指数行情卡片
     quote_cards = ""
@@ -235,44 +303,41 @@ def generate_html_report(report, quotes, news_list):
         change_str = q["change"]
         is_up = change_str.startswith("+")
         is_down = change_str.startswith("-") and change_str != "--"
-        color = "#e74c3c" if is_up else ("#2ecc71" if is_down else "#999")
-        arrow = "&#9650;" if is_up else ("&#9660;" if is_down else "")
+        bg = "linear-gradient(135deg, #fff5f5, #ffe8e8)" if is_up else ("linear-gradient(135deg, #f0fff4, #e6ffed)" if is_down else "linear-gradient(135deg, #f8f9fa, #f1f3f5)")
+        color = "#e74c3c" if is_up else ("#16a34a" if is_down else "#868e96")
+        border_color = "#fecaca" if is_up else ("#bbf7d0" if is_down else "#e9ecef")
+        arrow = "▲" if is_up else ("▼" if is_down else "")
         quote_cards += f"""
-        <div class="quote-card">
+        <div class="quote-card" style="background:{bg};border-color:{border_color}">
           <div class="quote-name">{q['name']}</div>
-          <div class="quote-price">{q['price']}</div>
+          <div class="quote-price" style="color:{color}">{q['price']}</div>
           <div class="quote-change" style="color:{color}">{arrow} {change_str}</div>
         </div>"""
 
     # 指数分时图
-    chart_images = {
-        "上证指数": "https://image.sinajs.cn/newchart/min/n/sh000001.gif",
-        "深证成指": "https://image.sinajs.cn/newchart/min/n/sz399001.gif",
-        "恒生指数": "https://image.sinajs.cn/newchart/min/n/int_hangseng.gif",
-        "纳斯达克": "https://image.sinajs.cn/newchart/min/n/int_nasdaq.gif",
-    }
+    chart_images = [
+        ("上证指数", "https://image.sinajs.cn/newchart/min/n/sh000001.gif"),
+        ("深证成指", "https://image.sinajs.cn/newchart/min/n/sz399001.gif"),
+        ("恒生指数", "https://image.sinajs.cn/newchart/min/n/int_hangseng.gif"),
+        ("纳斯达克", "https://image.sinajs.cn/newchart/min/n/int_nasdaq.gif"),
+    ]
     chart_html = ""
-    for name, img_url in chart_images.items():
+    for name, img_url in chart_images:
         chart_html += f"""
         <div class="chart-item">
-          <div class="chart-title">{name}</div>
-          <img src="{img_url}" alt="{name}分时图" onerror="this.style.display='none'">
+          <div class="chart-label">{name}</div>
+          <img src="{img_url}" alt="{name}" onerror="this.parentElement.style.display='none'">
         </div>"""
-
-    # 将 Markdown 报告转为 HTML
-    report_html = report
-    report_html = re.sub(r"^#{1,3}\s+(.+)$", r"<h3>\1</h3>", report_html, flags=re.MULTILINE)
-    report_html = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", report_html)
-    report_html = re.sub(r"^(\d+)\.\s+(.+)$", r"<div class='news-item'><span class='num'>\1</span> \2</div>", report_html, flags=re.MULTILINE)
-    report_html = re.sub(r"^- (.+)$", r"<li>\1</li>", report_html, flags=re.MULTILINE)
-    report_html = re.sub(r"^---$", r"<hr>", report_html, flags=re.MULTILINE)
-    report_html = report_html.replace("\n\n", "</p><p>").replace("\n", "<br>")
 
     # 新闻来源统计
     valid_news = [n for n in news_list if "error" not in n]
     a_count = sum(1 for n in valid_news if n.get("market") == "A股")
     us_count = sum(1 for n in valid_news if n.get("market") == "美股")
     hk_count = sum(1 for n in valid_news if n.get("market") == "港股")
+    total = len(valid_news)
+
+    # Markdown → 结构化 HTML
+    report_html = markdown_to_html(report)
 
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -281,106 +346,206 @@ def generate_html_report(report, quotes, news_list):
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>每日股市简报 - {today}</title>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap');
+
 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-body {{ font-family: -apple-system, "PingFang SC", "Helvetica Neue", Arial, sans-serif; background: #f5f5f5; color: #333; line-height: 1.8; }}
-
-.header {{
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-  color: white; padding: 40px 20px; text-align: center;
+body {{
+  font-family: 'Noto Sans SC', -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+  background: #0f0f1a; color: #333; line-height: 1.8; -webkit-font-smoothing: antialiased;
 }}
-.header h1 {{ font-size: 28px; margin-bottom: 8px; letter-spacing: 2px; }}
-.header .date {{ font-size: 14px; opacity: 0.8; }}
-.header .stats {{
-  display: flex; justify-content: center; gap: 20px; margin-top: 16px;
-  font-size: 13px; opacity: 0.9;
+
+/* ===== 封面头图 ===== */
+.hero {{
+  position: relative; overflow: hidden;
+  background: linear-gradient(145deg, #0c1222 0%, #1a1040 40%, #2d1b69 70%, #1e3a5f 100%);
+  padding: 50px 24px 40px; text-align: center; color: white;
 }}
-.header .stats span {{ background: rgba(255,255,255,0.15); padding: 4px 12px; border-radius: 12px; }}
+.hero::before {{
+  content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+  background: radial-gradient(circle at 30% 50%, rgba(99,102,241,0.15) 0%, transparent 50%),
+              radial-gradient(circle at 70% 30%, rgba(236,72,153,0.1) 0%, transparent 50%);
+  animation: aurora 10s ease-in-out infinite alternate;
+}}
+@keyframes aurora {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(3deg); }} }}
+.hero-content {{ position: relative; z-index: 1; }}
+.hero-label {{
+  display: inline-block; font-size: 11px; font-weight: 500; letter-spacing: 3px;
+  text-transform: uppercase; color: rgba(255,255,255,0.6);
+  border: 1px solid rgba(255,255,255,0.2); padding: 4px 16px; border-radius: 20px;
+  margin-bottom: 20px;
+}}
+.hero h1 {{
+  font-size: 36px; font-weight: 900; letter-spacing: 1px; margin-bottom: 8px;
+  background: linear-gradient(135deg, #fff 0%, #c4b5fd 50%, #f9a8d4 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}}
+.hero .date {{ font-size: 15px; color: rgba(255,255,255,0.6); font-weight: 300; }}
+.hero-stats {{
+  display: flex; justify-content: center; gap: 12px; margin-top: 24px; flex-wrap: wrap;
+}}
+.hero-stat {{
+  background: rgba(255,255,255,0.08); backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.12); border-radius: 12px;
+  padding: 8px 18px; font-size: 13px; color: rgba(255,255,255,0.85); font-weight: 500;
+}}
+.hero-stat em {{ font-style: normal; font-weight: 700; color: #c4b5fd; font-size: 16px; margin: 0 2px; }}
 
-.container {{ max-width: 780px; margin: 0 auto; padding: 0 16px; }}
+/* ===== 内容区 ===== */
+.page-body {{ background: #f4f4f8; }}
+.container {{ max-width: 680px; margin: 0 auto; padding: 0 16px 40px; }}
 
-.section {{ background: white; border-radius: 12px; margin: 16px 0; padding: 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }}
-.section-title {{ font-size: 18px; font-weight: 700; margin-bottom: 16px; padding-left: 12px; border-left: 4px solid #e74c3c; }}
+/* ===== 卡片 ===== */
+.card {{
+  background: white; border-radius: 16px; margin: 20px 0; padding: 28px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06);
+  border: 1px solid rgba(0,0,0,0.04);
+}}
+.card-title {{
+  font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px;
+  color: #6366f1; margin-bottom: 20px;
+  display: flex; align-items: center; gap: 8px;
+}}
+.card-title::after {{
+  content: ''; flex: 1; height: 1px;
+  background: linear-gradient(90deg, #e0e0e8, transparent);
+}}
 
+/* ===== 行情卡片 ===== */
 .quotes-grid {{
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px;
 }}
 .quote-card {{
-  background: #fafafa; border-radius: 8px; padding: 14px; text-align: center;
+  border-radius: 12px; padding: 14px 12px; text-align: center;
+  border: 1px solid #eee; transition: transform 0.2s;
+}}
+.quote-card:hover {{ transform: translateY(-2px); }}
+.quote-name {{ font-size: 11px; color: #888; font-weight: 500; letter-spacing: 1px; }}
+.quote-price {{ font-size: 20px; font-weight: 800; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }}
+.quote-change {{ font-size: 12px; font-weight: 700; }}
+
+/* ===== 走势图 ===== */
+.charts-grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }}
+.chart-item {{
+  background: #fafafe; border-radius: 10px; overflow: hidden;
   border: 1px solid #eee;
 }}
-.quote-name {{ font-size: 12px; color: #888; margin-bottom: 4px; }}
-.quote-price {{ font-size: 18px; font-weight: 700; }}
-.quote-change {{ font-size: 13px; margin-top: 2px; font-weight: 600; }}
+.chart-label {{
+  font-size: 12px; font-weight: 600; color: #555; text-align: center;
+  padding: 10px 0 4px; letter-spacing: 1px;
+}}
+.chart-item img {{ width: 100%; display: block; }}
 
-.charts-grid {{
-  display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;
+/* ===== 报告内容 ===== */
+.report-section {{ margin-bottom: 24px; }}
+.report-section:last-child {{ margin-bottom: 0; }}
+.report-section-title {{
+  font-size: 17px; font-weight: 700; color: #1e1e2e; margin-bottom: 14px;
+  padding: 10px 16px; border-radius: 10px;
+  background: linear-gradient(135deg, #f8f7ff, #f0f0ff);
+  border-left: 4px solid #6366f1;
+  display: flex; align-items: center; gap: 8px;
 }}
-.chart-item {{ text-align: center; }}
-.chart-title {{ font-size: 13px; color: #666; margin-bottom: 6px; font-weight: 600; }}
-.chart-item img {{ width: 100%; border-radius: 6px; border: 1px solid #eee; }}
+.section-icon {{ font-size: 20px; }}
 
-.report-content p {{ margin-bottom: 12px; }}
-.report-content h3 {{
-  font-size: 16px; margin: 24px 0 12px; padding: 8px 14px;
-  background: linear-gradient(90deg, #fff5f5, #fff); border-left: 3px solid #e74c3c;
-  border-radius: 0 6px 6px 0;
+.report-item {{
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 12px 16px; margin: 8px 0; border-radius: 10px;
+  background: #fafafe; border: 1px solid #f0f0f5;
+  transition: background 0.2s;
 }}
-.report-content .news-item {{
-  padding: 10px 14px; margin: 6px 0; background: #fafafa;
-  border-radius: 6px; border-left: 3px solid #3498db;
+.report-item:hover {{ background: #f5f3ff; }}
+.item-badge {{
+  flex-shrink: 0; width: 26px; height: 26px; line-height: 26px; text-align: center;
+  border-radius: 8px; color: white; font-size: 13px; font-weight: 800; margin-top: 2px;
 }}
-.report-content .num {{
-  display: inline-block; width: 22px; height: 22px; line-height: 22px;
-  text-align: center; background: #e74c3c; color: white; border-radius: 50%;
-  font-size: 12px; font-weight: 700; margin-right: 6px;
-}}
-.report-content li {{
-  margin: 6px 0; padding-left: 8px; list-style-position: inside;
-}}
-.report-content hr {{
-  border: none; height: 1px; background: #eee; margin: 20px 0;
-}}
-.report-content strong {{ color: #c0392b; }}
+.item-text {{ font-size: 14.5px; line-height: 1.7; color: #2d2d3a; }}
+.item-text strong {{ color: #6366f1; }}
 
+.report-bullet {{
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 8px 16px; margin: 4px 0;
+}}
+.bullet-dot {{
+  flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%;
+  background: #6366f1; margin-top: 10px;
+}}
+.bullet-text {{ font-size: 14.5px; line-height: 1.7; color: #2d2d3a; }}
+.bullet-text strong {{ color: #6366f1; }}
+
+.report-para {{
+  font-size: 14.5px; line-height: 1.9; color: #444; margin: 8px 0;
+  padding: 0 4px;
+}}
+.report-para strong {{ color: #6366f1; }}
+
+/* ===== 页脚 ===== */
 .footer {{
-  text-align: center; padding: 30px; color: #aaa; font-size: 12px;
+  text-align: center; padding: 30px 20px 50px; color: #aaa; font-size: 11px;
+  letter-spacing: 0.5px; line-height: 2;
+}}
+.footer-brand {{
+  font-size: 13px; font-weight: 600; color: #888; margin-bottom: 4px;
+}}
+.footer-divider {{
+  width: 40px; height: 2px; background: linear-gradient(90deg, #6366f1, #ec4899);
+  margin: 12px auto; border-radius: 1px;
+}}
+
+/* ===== 响应式 ===== */
+@media (max-width: 480px) {{
+  .hero h1 {{ font-size: 28px; }}
+  .card {{ padding: 20px 16px; margin: 12px 0; border-radius: 12px; }}
+  .quotes-grid {{ grid-template-columns: repeat(2, 1fr); gap: 8px; }}
+  .charts-grid {{ grid-template-columns: 1fr; }}
+  .hero-stats {{ gap: 8px; }}
+  .hero-stat {{ padding: 6px 12px; font-size: 12px; }}
+  .report-section-title {{ font-size: 15px; padding: 8px 12px; }}
+  .report-item {{ padding: 10px 12px; }}
 }}
 </style>
 </head>
 <body>
 
-<div class="header">
-  <h1>📈 每日股市简报</h1>
-  <div class="date">{now_str}</div>
-  <div class="stats">
-    <span>🇨🇳 A股 {a_count}条</span>
-    <span>🇺🇸 美股 {us_count}条</span>
-    <span>🇭🇰 港股 {hk_count}条</span>
+<div class="hero">
+  <div class="hero-content">
+    <div class="hero-label">Daily Market Brief</div>
+    <h1>每日股市简报</h1>
+    <div class="date">{today_cn} {weekday} {now_str} 更新</div>
+    <div class="hero-stats">
+      <div class="hero-stat">🇨🇳 A股 <em>{a_count}</em> 条</div>
+      <div class="hero-stat">🇺🇸 美股 <em>{us_count}</em> 条</div>
+      <div class="hero-stat">🇭🇰 港股 <em>{hk_count}</em> 条</div>
+      <div class="hero-stat">共 <em>{total}</em> 条新闻</div>
+    </div>
   </div>
 </div>
 
+<div class="page-body">
 <div class="container">
 
-  <div class="section">
-    <div class="section-title">实时行情</div>
+  <div class="card">
+    <div class="card-title">实时行情</div>
     <div class="quotes-grid">{quote_cards}</div>
   </div>
 
-  <div class="section">
-    <div class="section-title">大盘走势</div>
+  <div class="card">
+    <div class="card-title">大盘走势</div>
     <div class="charts-grid">{chart_html}</div>
   </div>
 
-  <div class="section">
-    <div class="section-title">AI 分析报告</div>
-    <div class="report-content"><p>{report_html}</p></div>
+  <div class="card">
+    <div class="card-title">AI 分析报告</div>
+    {report_html}
   </div>
 
 </div>
+</div>
 
 <div class="footer">
-  由股市日报 Agent 自动生成 · 数据来源：财联社 / 东方财富 / 新浪财经 · AI 分析仅供参考
+  <div class="footer-divider"></div>
+  <div class="footer-brand">Stock Daily Report Agent</div>
+  数据来源：财联社 / 东方财富 / 新浪财经<br>
+  AI 分析由通义千问生成 · 仅供参考，不构成投资建议
 </div>
 
 </body>
