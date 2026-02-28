@@ -1,7 +1,7 @@
 """
 独立版股市日报生成器 - 用于 GitHub Actions 定时运行
 直接抓取新闻 + 调用通义千问 API 生成报告
-不依赖 Dify，可在任何环境运行
+支持微信推送（Server酱）+ GitHub Pages 详情页
 """
 
 import json
@@ -13,15 +13,51 @@ import urllib.error
 from datetime import datetime
 
 
+# ============ 指数行情抓取 ============
+
+def fetch_index_quotes():
+    """从新浪财经抓取主要指数实时行情"""
+    symbols = {
+        "sh000001": "上证指数",
+        "sz399001": "深证成指",
+        "sz399006": "创业板指",
+        "int_hangseng": "恒生指数",
+        "int_dji": "道琼斯",
+        "int_nasdaq": "纳斯达克",
+        "int_sp500": "标普500",
+    }
+    results = []
+    for code, name in symbols.items():
+        try:
+            url = f"https://hq.sinajs.cn/list={code}"
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "Mozilla/5.0",
+                "Referer": "https://finance.sina.com.cn/",
+            })
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                raw = resp.read().decode("gbk")
+            parts = raw.split('"')[1].split(",")
+            if code.startswith("sh") or code.startswith("sz"):
+                price = float(parts[3])
+                prev_close = float(parts[2])
+                change_pct = (price - prev_close) / prev_close * 100 if prev_close else 0
+                results.append({"name": name, "code": code, "price": f"{price:.2f}", "change": f"{change_pct:+.2f}%"})
+            elif code.startswith("int_"):
+                price = float(parts[1])
+                change = float(parts[4]) if len(parts) > 4 else 0
+                change_pct = float(parts[5].replace("%", "")) if len(parts) > 5 else 0
+                results.append({"name": name, "code": code, "price": f"{price:.2f}", "change": f"{change_pct:+.2f}%"})
+        except Exception:
+            results.append({"name": name, "code": code, "price": "--", "change": "--"})
+    return results
+
+
 # ============ 新闻抓取部分 ============
 
 def fetch_cls_news(market_filter=None):
     """从财联社抓取快讯"""
     url = "https://www.cls.cn/nodeapi/updateTelegraphList?app=CailianpressWeb&os=web&sv=8.4.6&rn=50"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-        "Referer": "https://www.cls.cn/",
-    }
+    headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36", "Referer": "https://www.cls.cn/"}
     try:
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=15) as resp:
@@ -50,23 +86,18 @@ def fetch_cls_news(market_filter=None):
 
 
 def fetch_eastmoney_news():
-    """从东方财富抓取A股新闻"""
     url = "https://np-listapi.eastmoney.com/comm/web/getNewsByColumns?client=web&biz=web_news_col&column=350&order=1&needInteractData=0&page_index=1&page_size=15&req_trace=a"
     headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://finance.eastmoney.com/"}
     try:
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode())
-        articles = []
-        for item in data.get("data", {}).get("list", [])[:15]:
-            articles.append({"title": item.get("title", ""), "summary": item.get("digest", "")[:200], "time": item.get("showTime", ""), "source": "东方财富", "market": "A股"})
-        return articles
+        return [{"title": item.get("title", ""), "summary": item.get("digest", "")[:200], "time": item.get("showTime", ""), "source": "东方财富", "market": "A股"} for item in data.get("data", {}).get("list", [])[:15]]
     except Exception as e:
         return [{"error": str(e), "source": "东方财富", "market": "A股"}]
 
 
 def fetch_eastmoney_kuaixun(type_id="111", market="美股"):
-    """从东方财富快讯API抓取"""
     url = f"https://newsapi.eastmoney.com/kuaixun/v1/getlist_{type_id}_ajaxResult_15_1_.html"
     headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://finance.eastmoney.com/"}
     try:
@@ -75,16 +106,12 @@ def fetch_eastmoney_kuaixun(type_id="111", market="美股"):
             raw = resp.read().decode()
             json_str = raw[raw.index("{"):raw.rindex("}") + 1]
             data = json.loads(json_str)
-        articles = []
-        for item in data.get("LivesList", [])[:15]:
-            articles.append({"title": item.get("title", ""), "summary": item.get("digest", item.get("title", ""))[:200], "time": item.get("showtime", ""), "source": "东方财富", "market": market})
-        return articles
+        return [{"title": item.get("title", ""), "summary": item.get("digest", item.get("title", ""))[:200], "time": item.get("showtime", ""), "source": "东方财富", "market": market} for item in data.get("LivesList", [])[:15]]
     except Exception as e:
         return [{"error": str(e), "source": "东方财富", "market": market}]
 
 
 def fetch_sina_us_stock():
-    """从新浪财经抓取美股新闻"""
     url = "https://feed.mix.sina.com.cn/api/roll/get?pageid=153&lid=2509&k=&num=15&page=1"
     headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://finance.sina.com.cn/"}
     try:
@@ -104,23 +131,18 @@ def fetch_sina_us_stock():
 
 
 def fetch_eastmoney_hk():
-    """从东方财富抓取港股新闻"""
     url = "https://np-listapi.eastmoney.com/comm/web/getNewsByColumns?client=web&biz=web_news_col&column=351&order=1&needInteractData=0&page_index=1&page_size=15&req_trace=a"
     headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://hk.eastmoney.com/"}
     try:
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode())
-        articles = []
-        for item in data.get("data", {}).get("list", [])[:15]:
-            articles.append({"title": item.get("title", ""), "summary": item.get("digest", "")[:200], "time": item.get("showTime", ""), "source": "东方财富", "market": "港股"})
-        return articles
+        return [{"title": item.get("title", ""), "summary": item.get("digest", "")[:200], "time": item.get("showTime", ""), "source": "东方财富", "market": "港股"} for item in data.get("data", {}).get("list", [])[:15]]
     except Exception as e:
         return [{"error": str(e), "source": "东方财富", "market": "港股"}]
 
 
 def fetch_all_news():
-    """抓取全部市场新闻"""
     news = []
     news.extend(fetch_cls_news(market_filter="A"))
     news.extend(fetch_eastmoney_news())
@@ -132,7 +154,6 @@ def fetch_all_news():
 
 
 def format_news(news_list):
-    """将新闻列表格式化为文本"""
     markets = {"A股": [], "美股": [], "港股": []}
     for item in news_list:
         if "error" in item:
@@ -140,7 +161,6 @@ def format_news(news_list):
         market = item.get("market", "其他")
         if market in markets:
             markets[market].append(item)
-
     lines = [f"日期: {datetime.now().strftime('%Y-%m-%d %H:%M')}", f"共抓取 {len(news_list)} 条新闻\n"]
     for market_name, articles in markets.items():
         if not articles:
@@ -176,11 +196,9 @@ USER_PROMPT_TEMPLATE = """请根据以下今日股市新闻，生成一份专业
 
 
 def call_tongyi(news_text):
-    """调用通义千问 API"""
     api_key = os.environ.get("DASHSCOPE_API_KEY", "")
     if not api_key:
         return "错误：未设置 DASHSCOPE_API_KEY 环境变量"
-
     url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
     payload = json.dumps({
         "model": "qwen-turbo",
@@ -191,12 +209,7 @@ def call_tongyi(news_text):
         "temperature": 0.5,
         "max_tokens": 4096,
     }).encode("utf-8")
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}",
-    }
-
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
     req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=120) as resp:
@@ -209,22 +222,263 @@ def call_tongyi(news_text):
         return f"API 调用失败: {str(e)}"
 
 
-# ============ Server酱微信推送 ============
+# ============ HTML 详情页生成 ============
 
-def send_wechat(report):
-    """通过 Server酱 推送到微信"""
+def generate_html_report(report, quotes, news_list):
+    """生成精美的 HTML 详情页"""
+    today = datetime.now().strftime("%Y-%m-%d")
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    # 指数行情卡片
+    quote_cards = ""
+    for q in quotes:
+        change_str = q["change"]
+        is_up = change_str.startswith("+")
+        is_down = change_str.startswith("-") and change_str != "--"
+        color = "#e74c3c" if is_up else ("#2ecc71" if is_down else "#999")
+        arrow = "&#9650;" if is_up else ("&#9660;" if is_down else "")
+        quote_cards += f"""
+        <div class="quote-card">
+          <div class="quote-name">{q['name']}</div>
+          <div class="quote-price">{q['price']}</div>
+          <div class="quote-change" style="color:{color}">{arrow} {change_str}</div>
+        </div>"""
+
+    # 指数分时图
+    chart_images = {
+        "上证指数": "https://image.sinajs.cn/newchart/min/n/sh000001.gif",
+        "深证成指": "https://image.sinajs.cn/newchart/min/n/sz399001.gif",
+        "恒生指数": "https://image.sinajs.cn/newchart/min/n/int_hangseng.gif",
+        "纳斯达克": "https://image.sinajs.cn/newchart/min/n/int_nasdaq.gif",
+    }
+    chart_html = ""
+    for name, img_url in chart_images.items():
+        chart_html += f"""
+        <div class="chart-item">
+          <div class="chart-title">{name}</div>
+          <img src="{img_url}" alt="{name}分时图" onerror="this.style.display='none'">
+        </div>"""
+
+    # 将 Markdown 报告转为 HTML
+    report_html = report
+    report_html = re.sub(r"^#{1,3}\s+(.+)$", r"<h3>\1</h3>", report_html, flags=re.MULTILINE)
+    report_html = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", report_html)
+    report_html = re.sub(r"^(\d+)\.\s+(.+)$", r"<div class='news-item'><span class='num'>\1</span> \2</div>", report_html, flags=re.MULTILINE)
+    report_html = re.sub(r"^- (.+)$", r"<li>\1</li>", report_html, flags=re.MULTILINE)
+    report_html = re.sub(r"^---$", r"<hr>", report_html, flags=re.MULTILINE)
+    report_html = report_html.replace("\n\n", "</p><p>").replace("\n", "<br>")
+
+    # 新闻来源统计
+    valid_news = [n for n in news_list if "error" not in n]
+    a_count = sum(1 for n in valid_news if n.get("market") == "A股")
+    us_count = sum(1 for n in valid_news if n.get("market") == "美股")
+    hk_count = sum(1 for n in valid_news if n.get("market") == "港股")
+
+    html = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>每日股市简报 - {today}</title>
+<style>
+* {{ margin: 0; padding: 0; box-sizing: border-box; }}
+body {{ font-family: -apple-system, "PingFang SC", "Helvetica Neue", Arial, sans-serif; background: #f5f5f5; color: #333; line-height: 1.8; }}
+
+.header {{
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  color: white; padding: 40px 20px; text-align: center;
+}}
+.header h1 {{ font-size: 28px; margin-bottom: 8px; letter-spacing: 2px; }}
+.header .date {{ font-size: 14px; opacity: 0.8; }}
+.header .stats {{
+  display: flex; justify-content: center; gap: 20px; margin-top: 16px;
+  font-size: 13px; opacity: 0.9;
+}}
+.header .stats span {{ background: rgba(255,255,255,0.15); padding: 4px 12px; border-radius: 12px; }}
+
+.container {{ max-width: 780px; margin: 0 auto; padding: 0 16px; }}
+
+.section {{ background: white; border-radius: 12px; margin: 16px 0; padding: 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }}
+.section-title {{ font-size: 18px; font-weight: 700; margin-bottom: 16px; padding-left: 12px; border-left: 4px solid #e74c3c; }}
+
+.quotes-grid {{
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}}
+.quote-card {{
+  background: #fafafa; border-radius: 8px; padding: 14px; text-align: center;
+  border: 1px solid #eee;
+}}
+.quote-name {{ font-size: 12px; color: #888; margin-bottom: 4px; }}
+.quote-price {{ font-size: 18px; font-weight: 700; }}
+.quote-change {{ font-size: 13px; margin-top: 2px; font-weight: 600; }}
+
+.charts-grid {{
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;
+}}
+.chart-item {{ text-align: center; }}
+.chart-title {{ font-size: 13px; color: #666; margin-bottom: 6px; font-weight: 600; }}
+.chart-item img {{ width: 100%; border-radius: 6px; border: 1px solid #eee; }}
+
+.report-content p {{ margin-bottom: 12px; }}
+.report-content h3 {{
+  font-size: 16px; margin: 24px 0 12px; padding: 8px 14px;
+  background: linear-gradient(90deg, #fff5f5, #fff); border-left: 3px solid #e74c3c;
+  border-radius: 0 6px 6px 0;
+}}
+.report-content .news-item {{
+  padding: 10px 14px; margin: 6px 0; background: #fafafa;
+  border-radius: 6px; border-left: 3px solid #3498db;
+}}
+.report-content .num {{
+  display: inline-block; width: 22px; height: 22px; line-height: 22px;
+  text-align: center; background: #e74c3c; color: white; border-radius: 50%;
+  font-size: 12px; font-weight: 700; margin-right: 6px;
+}}
+.report-content li {{
+  margin: 6px 0; padding-left: 8px; list-style-position: inside;
+}}
+.report-content hr {{
+  border: none; height: 1px; background: #eee; margin: 20px 0;
+}}
+.report-content strong {{ color: #c0392b; }}
+
+.footer {{
+  text-align: center; padding: 30px; color: #aaa; font-size: 12px;
+}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📈 每日股市简报</h1>
+  <div class="date">{now_str}</div>
+  <div class="stats">
+    <span>🇨🇳 A股 {a_count}条</span>
+    <span>🇺🇸 美股 {us_count}条</span>
+    <span>🇭🇰 港股 {hk_count}条</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="section">
+    <div class="section-title">实时行情</div>
+    <div class="quotes-grid">{quote_cards}</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">大盘走势</div>
+    <div class="charts-grid">{chart_html}</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">AI 分析报告</div>
+    <div class="report-content"><p>{report_html}</p></div>
+  </div>
+
+</div>
+
+<div class="footer">
+  由股市日报 Agent 自动生成 · 数据来源：财联社 / 东方财富 / 新浪财经 · AI 分析仅供参考
+</div>
+
+</body>
+</html>"""
+    return html
+
+
+# ============ GitHub Pages 部署 ============
+
+def deploy_github_pages(html_content):
+    """将 HTML 报告写入 docs/ 目录供 GitHub Pages 使用"""
+    today = datetime.now().strftime("%Y%m%d")
+    os.makedirs("docs", exist_ok=True)
+
+    # 写入当天报告
+    report_path = f"docs/report_{today}.html"
+    with open(report_path, "w", encoding="utf-8") as f:
+        f.write(html_content)
+
+    # 写入 index.html（始终指向最新报告）
+    with open("docs/index.html", "w", encoding="utf-8") as f:
+        f.write(html_content)
+
+    page_url = os.environ.get("GITHUB_PAGES_URL", "")
+    if page_url:
+        full_url = f"{page_url}/report_{today}.html"
+    else:
+        repo = os.environ.get("GITHUB_REPOSITORY", "")
+        if repo:
+            owner = repo.split("/")[0].lower()
+            repo_name = repo.split("/")[1]
+            full_url = f"https://{owner}.github.io/{repo_name}/report_{today}.html"
+        else:
+            full_url = ""
+
+    print(f"详情页已生成: {report_path}")
+    if full_url:
+        print(f"GitHub Pages URL: {full_url}")
+    return full_url
+
+
+# ============ Server酱微信推送（公众号风格）============
+
+def send_wechat(report, quotes, page_url):
+    """通过 Server酱 推送精美的微信消息"""
     send_key = os.environ.get("SERVERCHAN_KEY", "")
     if not send_key:
         print("未设置 SERVERCHAN_KEY，跳过微信推送")
         return
 
-    today = datetime.now().strftime("%Y-%m-%d")
-    title = f"📈 每日股市简报 - {today}"
+    today = datetime.now().strftime("%Y年%m月%d日")
+    title = f"📈 每日股市简报 | {today}"
+
+    # 构建公众号风格的 Markdown 内容
+    lines = []
+
+    # 行情概览表格
+    lines.append("## 📊 今日行情一览\n")
+    lines.append("| 指数 | 最新价 | 涨跌幅 |")
+    lines.append("|:---:|:---:|:---:|")
+    for q in quotes:
+        change = q["change"]
+        if change.startswith("+"):
+            emoji = "🔴"
+        elif change.startswith("-") and change != "--":
+            emoji = "🟢"
+        else:
+            emoji = "⚪"
+        lines.append(f"| {q['name']} | {q['price']} | {emoji} {change} |")
+    lines.append("")
+
+    # 大盘分时走势图
+    lines.append("## 📈 大盘走势\n")
+    lines.append("![上证指数](https://image.sinajs.cn/newchart/min/n/sh000001.gif)")
+    lines.append("")
+    lines.append("![恒生指数](https://image.sinajs.cn/newchart/min/n/int_hangseng.gif)")
+    lines.append("")
+
+    # 分隔线
+    lines.append("---\n")
+
+    # AI 分析报告
+    lines.append("## 🤖 AI 分析报告\n")
+    lines.append(report)
+    lines.append("")
+
+    # 详情链接
+    lines.append("---\n")
+    if page_url:
+        lines.append(f"### 🔗 [点击查看完整图文报告]({page_url})\n")
+    lines.append(f"> 📅 {today} · 数据来自财联社/东方财富/新浪财经 · AI分析仅供参考")
+
+    desp = "\n".join(lines)
 
     url = f"https://sctapi.ftqq.com/{send_key}.send"
     payload = urllib.parse.urlencode({
         "title": title,
-        "desp": report,
+        "desp": desp,
     }).encode("utf-8")
 
     req = urllib.request.Request(url, data=payload, method="POST")
@@ -239,63 +493,12 @@ def send_wechat(report):
         print(f"微信推送失败: {e}")
 
 
-# ============ 邮件推送 ============
-
-def send_email(report):
-    """通过 Gmail SMTP 发送邮件"""
-    import smtplib
-    from email.mime.text import MIMEText
-    from email.mime.multipart import MIMEMultipart
-
-    smtp_user = os.environ.get("SMTP_USER", "")
-    smtp_pass = os.environ.get("SMTP_PASS", "")
-    email_to = os.environ.get("EMAIL_TO", smtp_user)
-
-    if not smtp_user or not smtp_pass:
-        print("未设置 SMTP_USER / SMTP_PASS，跳过邮件发送")
-        return
-
-    today = datetime.now().strftime("%Y-%m-%d")
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"📈 每日股市简报 - {today}"
-    msg["From"] = f"股市日报Agent <{smtp_user}>"
-    msg["To"] = email_to
-
-    # 纯文本版本
-    msg.attach(MIMEText(report, "plain", "utf-8"))
-
-    # HTML 版本（将 Markdown 简单转为 HTML）
-    html_body = report
-    html_body = re.sub(r"^# (.+)$", r"<h1>\1</h1>", html_body, flags=re.MULTILINE)
-    html_body = re.sub(r"^## (.+)$", r"<h2>\1</h2>", html_body, flags=re.MULTILINE)
-    html_body = re.sub(r"^### (.+)$", r"<h3>\1</h3>", html_body, flags=re.MULTILINE)
-    html_body = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", html_body)
-    html_body = re.sub(r"^- (.+)$", r"<li>\1</li>", html_body, flags=re.MULTILINE)
-    html_body = re.sub(r"^---$", r"<hr>", html_body, flags=re.MULTILINE)
-    html_body = html_body.replace("\n\n", "</p><p>").replace("\n", "<br>")
-    html_content = f"""<html><body style="font-family: -apple-system, Arial, sans-serif; max-width: 700px; margin: 0 auto; padding: 20px; color: #333;">
-<p>{html_body}</p>
-<hr><p style="color: #999; font-size: 12px;">此邮件由股市日报Agent自动生成</p>
-</body></html>"""
-    msg.attach(MIMEText(html_content, "html", "utf-8"))
-
-    try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as server:
-            server.login(smtp_user, smtp_pass)
-            server.sendmail(smtp_user, email_to.split(","), msg.as_string())
-        print(f"邮件发送成功 → {email_to}")
-    except Exception as e:
-        print(f"邮件发送失败: {e}")
-
-
 # ============ Webhook 推送 ============
 
 def send_webhook(text):
-    """推送到企业微信/钉钉/飞书 Webhook"""
     webhook_url = os.environ.get("WEBHOOK_URL", "")
     if not webhook_url:
         return
-
     if "qyapi.weixin" in webhook_url:
         payload = json.dumps({"msgtype": "markdown", "markdown": {"content": text[:4096]}})
     elif "dingtalk" in webhook_url:
@@ -304,7 +507,6 @@ def send_webhook(text):
         payload = json.dumps({"msg_type": "text", "content": {"text": text[:4096]}})
     else:
         payload = json.dumps({"text": text[:4096]})
-
     req = urllib.request.Request(webhook_url, data=payload.encode("utf-8"), headers={"Content-Type": "application/json"}, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -318,7 +520,13 @@ def send_webhook(text):
 def main():
     print(f"[{datetime.now()}] 开始生成股市日报...")
 
-    # 1. 抓取新闻
+    # 1. 抓取指数行情
+    print("正在抓取指数行情...")
+    quotes = fetch_index_quotes()
+    for q in quotes:
+        print(f"  {q['name']}: {q['price']} ({q['change']})")
+
+    # 2. 抓取新闻
     print("正在抓取新闻...")
     news = fetch_all_news()
     valid = [n for n in news if "error" not in n]
@@ -329,38 +537,38 @@ def main():
         print("没有抓取到任何新闻，退出")
         return
 
-    # 2. 格式化
+    # 3. 格式化 & 调用 LLM
     news_text = format_news(news)
-
-    # 3. 调用 LLM 生成报告
     print("正在生成分析报告...")
     report = call_tongyi(news_text)
 
-    # 4. 输出
     print("\n" + "=" * 60)
     print(report)
     print("=" * 60)
 
-    # 5. 写入文件（供 GitHub Actions artifact 保存）
+    # 4. 生成 HTML 详情页
+    print("\n正在生成详情页...")
+    html = generate_html_report(report, quotes, news)
+    page_url = deploy_github_pages(html)
+
+    # 5. 保存 Markdown
     report_file = f"report_{datetime.now().strftime('%Y%m%d_%H%M')}.md"
     with open(report_file, "w", encoding="utf-8") as f:
         f.write(f"# 每日股市简报 - {datetime.now().strftime('%Y-%m-%d')}\n\n")
         f.write(report)
-    print(f"\n报告已保存至: {report_file}")
+    print(f"Markdown 报告: {report_file}")
 
-    # 6. 设置 GitHub Actions 输出
+    # 6. GitHub Actions 输出
     github_output = os.environ.get("GITHUB_OUTPUT", "")
     if github_output:
         with open(github_output, "a") as f:
             f.write(f"report_file={report_file}\n")
+            f.write(f"page_url={page_url}\n")
 
     # 7. 推送微信
-    send_wechat(report)
+    send_wechat(report, quotes, page_url)
 
-    # 8. 发送邮件
-    send_email(report)
-
-    # 9. 推送 Webhook
+    # 8. 推送 Webhook
     send_webhook(report)
 
     print(f"\n[{datetime.now()}] 完成")
