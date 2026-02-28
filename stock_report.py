@@ -580,6 +580,55 @@ body {{
     return html
 
 
+# ============ PDF 生成 ============
+
+def generate_pdf(html_path):
+    """将 HTML 报告转为 PDF（使用 Chrome Headless）"""
+    import subprocess
+    import shutil
+
+    now = datetime.now()
+    pdf_filename = f"股市简报_{now.strftime('%Y-%m-%d_%H%M')}.pdf"
+    pdf_dir = os.path.join("docs", "pdf")
+    os.makedirs(pdf_dir, exist_ok=True)
+    pdf_path = os.path.join(pdf_dir, pdf_filename)
+
+    chrome_candidates = [
+        "google-chrome-stable", "google-chrome", "chromium-browser", "chromium",
+        "/usr/bin/google-chrome-stable", "/usr/bin/google-chrome",
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    ]
+    chrome = None
+    for c in chrome_candidates:
+        if shutil.which(c) or os.path.exists(c):
+            chrome = c
+            break
+
+    if not chrome:
+        print("未找到 Chrome，跳过 PDF 生成")
+        return None
+
+    abs_html = os.path.abspath(html_path)
+    try:
+        subprocess.run([
+            chrome, "--headless", "--disable-gpu", "--no-sandbox",
+            "--disable-software-rasterizer",
+            f"--print-to-pdf={pdf_path}",
+            "--no-pdf-header-footer",
+            f"file://{abs_html}"
+        ], capture_output=True, timeout=30)
+        if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
+            shutil.copy2(pdf_path, os.path.join(pdf_dir, "latest.pdf"))
+            print(f"PDF 已生成: {pdf_path}")
+            return pdf_path
+        else:
+            print("PDF 生成失败: 文件为空或不存在")
+            return None
+    except Exception as e:
+        print(f"PDF 生成失败: {e}")
+        return None
+
+
 # ============ GitHub Pages 部署 ============
 
 def deploy_github_pages(html_content):
@@ -742,6 +791,11 @@ def main():
     print("\n正在生成详情页...")
     html = generate_html_report(report, quotes, news)
     page_url = deploy_github_pages(html)
+
+    # 4.5 生成 PDF
+    print("正在生成 PDF...")
+    html_file = f"docs/report_{datetime.now().strftime('%Y%m%d')}.html"
+    generate_pdf(html_file)
 
     # 5. 保存 Markdown
     report_file = f"report_{datetime.now().strftime('%Y%m%d_%H%M')}.md"
