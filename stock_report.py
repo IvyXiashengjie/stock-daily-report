@@ -275,7 +275,7 @@ def markdown_to_html(md):
     return "\n".join(html_parts)
 
 
-def generate_html_report(report, quotes, news_list):
+def generate_html_report(report, quotes, news_list, page_url=""):
     """生成 Bloomberg/WSJ 风格 HTML 详情页"""
     today = datetime.now().strftime("%Y-%m-%d")
     today_en = datetime.now().strftime("%B %d, %Y")
@@ -507,6 +507,14 @@ body {{
   padding-top: 12px; border-top: 1px solid #e0dcd5;
   line-height: 1.8;
 }}
+.online-link {{
+  display: inline-block; margin-top: 14px;
+  padding: 10px 28px; background: #c0392b; color: #fff;
+  font-size: 13px; font-weight: 600; letter-spacing: 1px;
+  text-decoration: none; border-radius: 3px;
+  transition: background 0.2s;
+}}
+.online-link:hover {{ background: #a93226; }}
 
 /* ===== 响应式 ===== */
 @media (max-width: 600px) {{
@@ -565,6 +573,7 @@ body {{
 
 <div class="site-footer">
   <div class="footer-brand">MARKET BRIEF</div>
+  {f'<a class="online-link" href="{page_url}">查看在线版本</a>' if page_url else ''}
   <div class="footer-info">
     Data: CLS / East Money / Sina Finance<br>
     AI Analysis by Tongyi Qwen
@@ -789,7 +798,16 @@ def main():
 
     # 4. 生成 HTML 详情页
     print("\n正在生成详情页...")
-    html = generate_html_report(report, quotes, news)
+    # 预先构造 GitHub Pages URL，嵌入 HTML/PDF 中
+    today_str = datetime.now().strftime("%Y%m%d")
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    if repo:
+        owner = repo.split("/")[0].lower()
+        repo_name = repo.split("/")[1]
+        page_url = f"https://{owner}.github.io/{repo_name}/report_{today_str}.html"
+    else:
+        page_url = "https://ivyxiashengjie.github.io/stock-daily-report/"
+    html = generate_html_report(report, quotes, news, page_url)
     page_url = deploy_github_pages(html)
 
     # 4.5 生成 PDF
