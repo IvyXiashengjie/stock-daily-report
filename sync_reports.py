@@ -6,6 +6,7 @@
 """
 import json
 import os
+import urllib.parse
 import urllib.request
 
 LOCAL_DIR = os.path.expanduser("~/StockReports")
@@ -44,9 +45,16 @@ def sync():
         download_url = f.get("download_url", "")
         if not download_url:
             continue
+        # 对中文文件名进行 URL 编码
+        parts = download_url.rsplit("/", 1)
+        if len(parts) == 2:
+            download_url = parts[0] + "/" + urllib.parse.quote(parts[1])
         try:
             print(f"下载: {name} ...", end=" ")
-            urllib.request.urlretrieve(download_url, local_path)
+            req = urllib.request.Request(download_url, headers={"User-Agent": "StockReportSync/1.0"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                with open(local_path, "wb") as out:
+                    out.write(resp.read())
             print("OK")
             new_count += 1
         except Exception as e:
